@@ -10,13 +10,27 @@
 
 ## 사전 조건
 
-머신에 다음이 미리 깔려 있어야 함 (DGX Spark 기본 이미지엔 보통 다 있음):
+DGX Spark(GB10) 기본 이미지엔 보통 다 있다. 새 머신에선 다음을 직접 점검:
 
-- Ubuntu (aarch64), CUDA 13 드라이버
-- Python 3.11+
-- `git`, `curl`, `build-essential`
+### 시스템 (미리 설치돼 있어야 함)
+- **Ubuntu aarch64**
+- **NVIDIA 드라이버 (CUDA 13 지원, 580+ 권장)** — `nvidia-smi` 로 `CUDA Version: 13.x` 확인. install.sh는 드라이버를 깔지 못함 (커널 모듈 + sudo 필요)
+- **Python 3.11+** — `python3 --version`
+- **`git`, `curl`, `build-essential`**
 
-`uv`는 install.sh가 알아서 설치함.
+### install.sh가 알아서 설치하는 것 (시스템 X, 프로젝트 .venv 안)
+- `uv` (없으면 `~/.local/bin`에 설치)
+- 일반 의존성 (FastAPI, httpx, pydantic, pyyaml 등)
+- vLLM CUDA 13 nightly wheel + `nvidia-cuda-runtime-cu13` / `nvidia-cudnn-cu13` 등 런타임 libs (.venv 격리)
+- `huggingface_hub` (vllm 의존성으로 따라옴)
+- Qwen3.5-27B 모델 (`./models/qwen3.5-27b/`)
+
+### 머신 자원
+- **디스크 ~70GB 여유** — 모델 ~54GB + .venv ~6GB + 캐시 여유. `df -h .` 으로 확인
+- **외부 인터넷 접근** — `huggingface.co`, `astral.sh`, `wheels.vllm.ai`, `pypi.org`. 사내망에서 외부 통신이 막혀 있다면 사내 미러 셋업 필요 (이 레포는 그건 다루지 않음)
+- **포트 8080, 8000 비어있을 것** — 다른 서비스가 점유 중이면 `APP_PORT` / `configs/vllm.yaml`의 `port` 변경
+
+> **드라이버와 런타임 라이브러리는 다른 층이다.** `nvidia-smi` 가 보이는데 vLLM이 `libcudart.so.X not found` 로 죽으면 드라이버는 OK인데 런타임 libs 매칭이 안 된다는 뜻 — install.sh의 vLLM 설치 단계가 실패했을 가능성이 큼.
 
 ---
 

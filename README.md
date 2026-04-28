@@ -40,10 +40,14 @@ DGX Spark(GB10) 기본 이미지엔 보통 다 있다. 새 머신에선 다음�
 git clone <repo-url> vllm-auto
 cd vllm-auto
 ./scripts/install.sh   # 1회. uv + 의존성 + vLLM + 모델 다운로드
-./scripts/start.sh     # 매번. vllm-server 기동 + 앱 서버 기동
+./scripts/start.sh     # 매번. 백그라운드로 vllm-server + 앱 서버 기동
 ```
 
+`start.sh` 는 기본 백그라운드 모드. 즉시 셸로 복귀하고 진행은 `tail -f logs/start.out` 로.
+포그라운드(Ctrl-C 로 직접 끊기)가 필요하면 `./scripts/start.sh --fg`.
+
 **첫 install은 1~3시간 걸릴 수 있음** — 모델 ~54GB + (필요 시) vLLM 소스 빌드.
+**기동 후 모델 로딩 5~10분** 동안 `/health` 가 200 응답하지 않을 수 있음 (정상).
 
 ---
 
@@ -248,11 +252,12 @@ JSONL 한 줄 = 한 요청. 필드:
 
 vLLM 자체 로그는 `~/.local/state/vllm-server/server.log`.
 
-### 백그라운드 실행
+### 기동/종료
 
 ```bash
-nohup ./scripts/start.sh > /tmp/vllm-auto.out 2>&1 &
-./scripts/stop.sh   # 종료
+./scripts/start.sh        # 기본 백그라운드. 로그: logs/start.out
+./scripts/start.sh --fg   # 포그라운드 (Ctrl-C 로 끊기)
+./scripts/stop.sh         # 종료
 ```
 
 ---

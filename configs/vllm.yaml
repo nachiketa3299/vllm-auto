@@ -12,6 +12,10 @@ trust_remote_code: true
 limit_mm_per_prompt:
   image: 16
 enforce_eager: false
+# 모델이 <think>...</think> 토큰을 만들 때, vLLM 이 응답에서 그 부분을 떼어
+# reasoning_content 필드로 분리해 주도록 reasoning parser 활성화. Qwen3 계열은
+# 'qwen3' 사용.
+reasoning_parser: qwen3
 
 # vllm 신규 플래그 대응용 탈출구. argv 말미에 그대로 append.
 extra_args: []

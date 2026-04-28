@@ -25,6 +25,7 @@ class VllmConfig(BaseModel):
     trust_remote_code: bool = False
     limit_mm_per_prompt: dict[str, int] | None = None
     enforce_eager: bool = False
+    reasoning_parser: str | None = None
     extra_args: list[str] = Field(default_factory=list)
 
     # Server-owned (not forwarded to vllm).

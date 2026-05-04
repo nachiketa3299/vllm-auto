@@ -19,6 +19,10 @@ DGX Spark(GB10) 기본 이미지엔 보통 다 있다. 새 머신에선 다음�
 - **NVIDIA 드라이버 (CUDA 13 지원, 580+ 권장)** — `nvidia-smi` 로 `CUDA Version: 13.x` 확인
 - **Python 3.11+** — `python3 --version`
 - **`git`, `curl`, `build-essential`**
+- **`python3-dev` / `python3.12-dev`** — ARM aarch64 환경에선 `fastsafetensors` 등 일부 vllm 의존성이 prebuilt wheel 이 없어 source build 가 강제됨. Python 헤더(`Python.h`) 가 필요. `run_vlm_app.sh` 가 시작 시 점검하여 누락되면 안내 후 종료. 한 번에 설치:
+  ```
+  sudo apt install python3-dev python3.12-dev build-essential
+  ```
 
 ### 셸이 알아서 처리하는 것 (최초 `run_vlm_app.sh` 1회, 인터넷 필요)
 - `uv` 설치 (없으면 `curl -LsSf https://astral.sh/uv/install.sh | sh`, `~/.local/bin` 에 설치)

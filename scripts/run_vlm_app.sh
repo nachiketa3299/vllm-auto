@@ -49,6 +49,23 @@ if ! command -v uv > /dev/null 2>&1; then
   fi
 fi
 
+# 1.5. 시스템 빌드툴 사전 점검.
+#      ARM aarch64 환경에선 fastsafetensors 등 일부 vllm 의존성이 prebuilt wheel 이
+#      없어 source build 가 강제됨. 그 build 는 Python.h (python3-dev) 가 필요.
+#      sudo 가 필요한 패키지라 자동 설치는 안 하고, 누락되면 에러 + 안내 후 종료.
+PY_HEADER="/usr/include/python3.12/Python.h"
+if [ ! -f "${PY_HEADER}" ] && [ -z "$(find /usr/include -maxdepth 2 -name 'Python.h' 2>/dev/null | head -1)" ]; then
+  write_status '{"current_status":"failed","message":"python3-dev not installed (Python.h missing)"}'
+  cat >&2 <<'HINT'
+[run_vlm_app] FAILED: Python.h not found.
+ARM aarch64 build of fastsafetensors (vllm 의존성) needs system Python headers.
+Install once with:
+    sudo apt install python3-dev python3.12-dev build-essential
+Then re-run this script.
+HINT
+  exit 1
+fi
+
 # 2. 첫 실행이면 venv 부트스트랩 (vllm + 의존성 설치).
 #    핵심: vllm 은 CUDA 13 nightly wheel index 에서 받아야 한다.
 #    PyPI 기본 인덱스는 CUDA 12 + 일부 의존성(fastsafetensors 등) 의 ARM aarch64

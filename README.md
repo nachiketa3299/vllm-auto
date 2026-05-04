@@ -19,9 +19,9 @@ DGX Spark(GB10) 기본 이미지엔 보통 다 있다. 새 머신에선 다음�
 - **NVIDIA 드라이버 (CUDA 13 지원, 580+ 권장)** — `nvidia-smi` 로 `CUDA Version: 13.x` 확인
 - **Python 3.11+** — `python3 --version`
 - **`git`, `curl`, `build-essential`**
-- **`uv`** — 없으면 `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
-### 셸이 알아서 처리하는 것 (최초 `run_vlm_app.sh` 1회)
+### 셸이 알아서 처리하는 것 (최초 `run_vlm_app.sh` 1회, 인터넷 필요)
+- `uv` 설치 (없으면 `curl -LsSf https://astral.sh/uv/install.sh | sh`, `~/.local/bin` 에 설치)
 - `.venv/` 생성 (`uv venv`)
 - vLLM 설치 (`uv pip install vllm`)
 

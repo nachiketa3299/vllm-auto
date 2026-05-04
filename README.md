@@ -1,10 +1,12 @@
 # vllm-auto
 
-사내 GX10(NVIDIA DGX Spark / GB10) 머신에 Qwen3.5-27B(VL) 모델을 vLLM으로 띄우고, **사내 자동화 워크플로**가 호출할 수 있는 HTTP 엔드포인트를 노출하는 단일 레포 부트스트랩.
+사내 GX10(NVIDIA DGX Spark / GB10) 머신에 Qwen3.5-27B(VL) 모델을 vLLM 으로 띄우는 **lifecycle 셸 묶음**.
 
-- 외부엔 애플리케이션 레이어 엔드포인트만 노출. vLLM은 가려져 있음
-- 인증 없음, 사내망 전용
-- 단일 머신당 1개 인스턴스, 클론 → install → start
+- 추론 API 는 vLLM 자체의 OpenAI 호환 엔드포인트(`/v1/chat/completions` 등)를 그대로 노출.
+- 클라이언트(AI Create Studio Unity 등) 가 SSH 로 본 셸을 호출하여 모델을 ready 상태로 만든 뒤, HTTP 로 vLLM 에 직접 추론 요청.
+- 인증 없음, 사내망 전용. 단일 머신당 1개 인스턴스.
+
+이전 버전(FastAPI 래퍼 + lifecycle CLI) 은 폐기됐다. 이유: 클라이언트가 매 요청마다 모델을 콜드 부팅(load → infer → unload) 하는 운영 패턴이 결정되면서 HTTP 래퍼 레이어가 잉여가 됨. 추론 통신은 클라이언트가 vLLM 과 직접 OpenAI API 로 대화한다.
 
 ---
 
@@ -14,23 +16,31 @@ DGX Spark(GB10) 기본 이미지엔 보통 다 있다. 새 머신에선 다음�
 
 ### 시스템 (미리 설치돼 있어야 함)
 - **Ubuntu aarch64**
-- **NVIDIA 드라이버 (CUDA 13 지원, 580+ 권장)** — `nvidia-smi` 로 `CUDA Version: 13.x` 확인. install.sh는 드라이버를 깔지 못함 (커널 모듈 + sudo 필요)
+- **NVIDIA 드라이버 (CUDA 13 지원, 580+ 권장)** — `nvidia-smi` 로 `CUDA Version: 13.x` 확인
 - **Python 3.11+** — `python3 --version`
 - **`git`, `curl`, `build-essential`**
+- **`uv`** — 없으면 `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
-### install.sh가 알아서 설치하는 것 (시스템 X, 프로젝트 .venv 안)
-- `uv` (없으면 `~/.local/bin`에 설치)
-- 일반 의존성 (FastAPI, httpx, pydantic, pyyaml 등)
-- vLLM CUDA 13 nightly wheel + `nvidia-cuda-runtime-cu13` / `nvidia-cudnn-cu13` 등 런타임 libs (.venv 격리)
-- `huggingface_hub` (vllm 의존성으로 따라옴)
-- Qwen3.5-27B 모델 (`./models/qwen3.5-27b/`)
+### 셸이 알아서 처리하는 것 (최초 `run_vlm_app.sh` 1회)
+- `.venv/` 생성 (`uv venv`)
+- vLLM 설치 (`uv pip install vllm`)
+
+### 사용자가 미리 준비해야 하는 것
+- **모델 가중치**: `./models/qwen3.5-27b/` 에 Qwen3.5-27B 가중치를 두어야 한다. 자동 다운로드 안 함.
+  ```
+  ./models/qwen3.5-27b/
+  ├── config.json
+  ├── tokenizer.json
+  ├── tokenizer_config.json
+  ├── model.safetensors-00001-of-00011.safetensors
+  └── ...
+  ```
+  출처: <https://huggingface.co/Qwen/Qwen3.5-27B>. `huggingface-cli download Qwen/Qwen3.5-27B --local-dir ./models/qwen3.5-27b` 등으로.
 
 ### 머신 자원
-- **디스크 ~70GB 여유** — 모델 ~54GB + .venv ~6GB + 캐시 여유. `df -h .` 으로 확인
-- **외부 인터넷 접근** — `huggingface.co`, `astral.sh`, `wheels.vllm.ai`, `pypi.org`. 사내망에서 외부 통신이 막혀 있다면 사내 미러 셋업 필요 (이 레포는 그건 다루지 않음)
-- **포트 8080, 8000 비어있을 것** — 다른 서비스가 점유 중이면 `APP_PORT` / `configs/vllm.yaml`의 `port` 변경
-
-> **드라이버와 런타임 라이브러리는 다른 층이다.** `nvidia-smi` 가 보이는데 vLLM이 `libcudart.so.X not found` 로 죽으면 드라이버는 OK인데 런타임 libs 매칭이 안 된다는 뜻 — install.sh의 vLLM 설치 단계가 실패했을 가능성이 큼.
+- **디스크 ~70GB 여유** — 모델 ~54GB + .venv ~6GB
+- **GPU 메모리** — `gpu_memory_utilization: 0.90` 이라 vLLM 이 GPU 한 대를 통째로 잡는다. 다른 모델과 공존 불가.
+- **포트 8000 비어있을 것** — 다른 서비스가 점유 중이면 `VLLM_PORT` 환경변수로 변경
 
 ---
 
@@ -39,281 +49,145 @@ DGX Spark(GB10) 기본 이미지엔 보통 다 있다. 새 머신에선 다음�
 ```bash
 git clone <repo-url> vllm-auto
 cd vllm-auto
-./scripts/install.sh   # 1회. uv + 의존성 + vLLM + 모델 다운로드
-./scripts/start.sh     # 매번. 백그라운드로 vllm-server + 앱 서버 기동
+
+# 모델 가중치를 ./models/qwen3.5-27b/ 에 배치 (위 참고)
+
+# 부팅 (최초 호출은 venv 셋업 + 모델 로딩까지 5~10분 정도 걸린다)
+./scripts/run_vlm_app.sh
+
+# 부팅 완료 신호 확인
+cat output/status.json
+# {"current_status":"ready","base_url":"http://127.0.0.1:8000/v1"}
+
+# 이 시점 이후 클라이언트가 http://<host>:8000/v1/chat/completions 로 직접 추론.
+# (예시는 아래 참고)
+
+# 종료
+./scripts/stop_vlm_app.sh
+cat output/status.json
+# {"current_status":"complete","message":"vllm stopped"}
 ```
 
-`start.sh` 는 기본 백그라운드 모드. 즉시 셸로 복귀하고 진행은 `tail -f logs/start.out` 로.
-포그라운드(Ctrl-C 로 직접 끊기)가 필요하면 `./scripts/start.sh --fg`.
-
-**첫 install은 1~3시간 걸릴 수 있음** — 모델 ~54GB + (필요 시) vLLM 소스 빌드.
-**기동 후 모델 로딩 5~10분** 동안 `/health` 가 200 응답하지 않을 수 있음 (정상).
+`run_vlm_app.sh` 는 멱등이다. 이미 떠 있으면 부팅을 스킵하고 ready 만 다시 신호한다.
 
 ---
 
-## 엔드포인트
+## 추론 호출 (vLLM OpenAI 호환 API)
 
-서버 기본 바인딩: `0.0.0.0:8080`. 사내 IP로 접근 가능.
+부팅이 끝난 후 클라이언트가 직접 vLLM 에 친다. `vllm-auto` 자체는 추론 경로에 끼지 않는다.
 
-### `GET /health`
-
+### 모델 정보 조회
 ```bash
-curl -s http://<host>:8080/health
-# {"status":"ok"}
+curl http://<host>:8000/v1/models
 ```
 
-### `POST /generate`
-
-multipart/form-data. **`image`와 `user_request` 중 하나 이상 필수.**
-
-| 필드 | 타입 | 기본 | 설명 |
-|---|---|---|---|
-| `image` | file | — | 이미지 파일 (jpeg/png 등). 최대 15 MiB |
-| `user_request` | string | — | 텍스트 프롬프트 |
-| `max_completion_tokens` | int | 10000 | 생성 최대 토큰 |
-| `timeout_seconds` | int | 600 | vLLM 응답 대기 (초) |
-| `max_image_bytes` | int | 15728640 | 이미지 크기 제한 |
-| `json_output` | bool | false | true면 모델이 JSON 객체로만 응답하도록 강제 |
-| `enable_thinking` | bool | false | true면 reasoning 토큰 생성 (느려지지만 품질↑) |
-
-응답 (200):
-```json
-{
-  "output_text": "...",
-  "reasoning_text": "",
-  "logs": ["...", "..."]
-}
-```
-
-에러 응답:
-```json
-{ "detail": "Either an image or prompt text is required.", "logs": [...] }
-```
-
-### curl 예시
-
-**텍스트 전용:**
+### 텍스트만
 ```bash
-curl -s -X POST http://<host>:8080/generate \
-  -F 'user_request=한국의 수도는 어디?' | jq .output_text
+curl http://<host>:8000/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "qwen3.5-27b",
+    "messages": [{"role":"user","content":"한국의 수도는?"}],
+    "max_completion_tokens": 100
+  }'
 ```
 
-**이미지 + 텍스트:**
+### 이미지 + 텍스트 (멀티모달)
+이미지를 base64 data URL 로 인코딩해서 메시지에 포함.
 ```bash
-curl -s -X POST http://<host>:8080/generate \
-  -F 'image=@photo.jpg' \
-  -F 'user_request=이 사진을 한 줄로 묘사해라' | jq .output_text
+IMG_B64=$(base64 -w 0 photo.jpg)
+curl http://<host>:8000/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d "{
+    \"model\": \"qwen3.5-27b\",
+    \"messages\": [{
+      \"role\":\"user\",
+      \"content\":[
+        {\"type\":\"text\",\"text\":\"이 사진을 묘사해라\"},
+        {\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/jpeg;base64,${IMG_B64}\"}}
+      ]
+    }]
+  }"
 ```
 
-**JSON 강제 + 사고 사용:**
-```bash
-curl -s -X POST http://<host>:8080/generate \
-  -F 'user_request=key=value 두 쌍을 JSON으로 만들어줘' \
-  -F 'json_output=true' \
-  -F 'enable_thinking=true' | jq .
-```
+### 스트리밍 (SSE)
+요청 본문에 `"stream": true` 를 추가하면 응답이 SSE 청크로 흘러온다. 클라이언트는 `data: ` 라인을 파싱하여 `choices[0].delta.content` (또는 `delta.reasoning_content`) 를 누적.
 
-### Python 예시
+### 사고 과정 (reasoning) 토큰 분리
+요청 본문에 `"chat_template_kwargs": {"enable_thinking": true}` 를 추가하면 `<think>...</think>` 토큰이 응답의 별도 필드(`reasoning_content` / `delta.reasoning`)로 분리된다. (`run_vlm_app.sh` 에서 `--reasoning-parser qwen3` 옵션이 활성화되어 있어야 함 — 기본 활성화)
 
-```python
-import httpx
+### JSON 출력 강제
+요청 본문에 `"response_format": {"type": "json_object"}` 를 추가.
 
-with open("photo.jpg", "rb") as f:
-    r = httpx.post(
-        "http://<host>:8080/generate",
-        data={"user_request": "이 사진을 묘사해라"},
-        files={"image": ("photo.jpg", f, "image/jpeg")},
-        timeout=600,
-    )
-print(r.json()["output_text"])
-```
-
-자동 OpenAPI 스펙: `http://<host>:8080/docs`, `http://<host>:8080/openapi.json`.
+상세는 vLLM 문서 또는 OpenAI Chat Completions 스펙: <https://platform.openai.com/docs/api-reference/chat/create>.
 
 ---
 
-## AI 에이전트에게 노출하기
+## 환경변수
 
-이 서버는 OpenAPI 3.1 스펙을 자동으로 노출한다. 다른 AI 개발자가 자기 에이전트(Claude, GPT, Cursor 등)에게 이 서버를 사용시키려면 다음 정보 한 묶음을 시스템 프롬프트나 도구 정의에 넣으면 된다.
+`run_vlm_app.sh` 가 읽는 환경변수:
 
-### 핵심 URL
+| 변수 | 기본 | 설명 |
+|---|---|---|
+| `VLLM_HOST` | `127.0.0.1` | vLLM 바인딩 호스트. 외부 접속 허용하려면 `0.0.0.0`. |
+| `VLLM_PORT` | `8000` | vLLM 바인딩 포트. |
+| `MODEL_PATH` | `./models/qwen3.5-27b` | 모델 가중치 디렉토리. |
+| `STARTUP_TIMEOUT_SEC` | `900` | 모델 로딩 대기 타임아웃 (초). 초과 시 status 가 `failed`. |
 
-| 경로 | 용도 |
+```bash
+VLLM_HOST=0.0.0.0 ./scripts/run_vlm_app.sh
+```
+
+---
+
+## 출력/로그 위치
+
+| 파일 | 내용 |
 |---|---|
-| `http://<host>:8080/openapi.json` | OpenAPI 3.1 스펙 (JSON). AI가 직접 읽고 호출 코드 생성 |
-| `http://<host>:8080/docs` | Swagger UI. 사람이 브라우저로 탐색 + "Try it out"로 즉시 호출 |
-| `http://<host>:8080/redoc` | ReDoc UI. 정적인 가독성 좋은 문서 |
+| `output/status.json` | 현재 lifecycle 상태. 클라이언트가 폴링하여 ready 감지. |
+| `logs/vllm.log` | vLLM 자체 stdout/stderr (로딩 진행, 에러 등) |
+| `vllm.pid` | vllm 프로세스 PID. `stop_vlm_app.sh` 가 사용. |
 
-### 시스템 프롬프트 예시 (AI에게 던지는 한 줄)
-
-```
-다음 사내 멀티모달 LLM 엔드포인트를 사용해서 작업해라.
-- OpenAPI 스펙: http://<host>:8080/openapi.json
-- 핵심 엔드포인트: POST /generate (multipart/form-data)
-- 필수: image 또는 user_request 중 하나
-- 응답: {output_text, reasoning_text, logs}
-- 모델: Qwen3.5-27B (비전+텍스트), 최대 컨텍스트 50000 토큰
-- 인증 없음, 사내망 전용
-```
-
-이 정도만 줘도 똑똑한 LLM은 OpenAPI를 fetch해서 알아서 호출 코드를 만든다. 응답 스키마 (`GenerateResponse`, `GenerateErrorResponse`)도 컴포넌트로 정의돼 있어 AI가 응답 파싱까지 맞춰 짠다.
-
-### OpenAI function/tool 형식이 필요할 때
-
-OpenAI/Anthropic API의 `tools=[...]` 인자에 직접 박을 수 있는 단일 도구 정의:
+`output/status.json` 의 형식:
 
 ```json
-{
-  "name": "qwen_generate",
-  "description": "사내 GX10에서 돌아가는 Qwen3.5-27B(VL)에게 텍스트/이미지 입력으로 응답을 받는다. 이미지·텍스트 중 하나는 필수.",
-  "input_schema": {
-    "type": "object",
-    "properties": {
-      "user_request": {"type": "string", "description": "텍스트 프롬프트"},
-      "image_path": {"type": "string", "description": "업로드할 이미지 파일 경로 (선택)"},
-      "max_completion_tokens": {"type": "integer", "default": 10000},
-      "json_output": {"type": "boolean", "default": false}
-    }
-  }
-}
+// 부팅 진행 중에는 파일 없음 (또는 이전 종료 상태가 남아있음)
+// run_vlm_app.sh 가 끝나면:
+{"current_status":"ready","base_url":"http://127.0.0.1:8000/v1"}
+
+// 또는 부팅 실패:
+{"current_status":"failed","message":"vllm startup timeout"}
+
+// stop_vlm_app.sh 가 끝나면:
+{"current_status":"complete","message":"vllm stopped"}
 ```
 
-각 AI 개발자가 이 도구 정의를 자기 에이전트에 등록하고, 도구 실행 핸들러에서 `POST /generate`로 multipart 호출하면 된다.
-
-### 빠른 호출 패턴 요약
-
-```python
-import httpx
-
-def call(prompt: str, image_path: str | None = None) -> str:
-    files = {}
-    if image_path:
-        files["image"] = open(image_path, "rb")
-    r = httpx.post(
-        "http://<host>:8080/generate",
-        data={"user_request": prompt},
-        files=files or None,
-        timeout=600,
-    )
-    r.raise_for_status()
-    return r.json()["output_text"]
-```
+원자적 쓰기(`*.tmp` 작성 후 `mv`)를 보장하므로 클라이언트가 부분 파일을 읽지 않는다.
 
 ---
 
-## 설정 변경
+## 설정 참고 (`configs/vllm.yaml`)
 
-### 포트/호스트/타임아웃 등 (앱 레이어)
-
-`configs/app.yaml` 편집 또는 환경변수:
-
-| 환경변수 | 기본 |
-|---|---|
-| `APP_HOST` | `0.0.0.0` |
-| `APP_PORT` | `8080` |
-| `VLLM_BASE_URL` | `http://127.0.0.1:8000/v1` |
-| `APP_MAX_COMPLETION_TOKENS` | `10000` |
-| `APP_TIMEOUT_SECONDS` | `600` |
-| `APP_MAX_IMAGE_BYTES` | `15728640` |
-| `APP_LOG_PATH` | `logs/requests.jsonl` |
-| `APP_SYSTEM_PROMPT_PATH` | `system_prompt.md` |
-
-```bash
-APP_PORT=9090 ./scripts/start.sh
-```
-
-### vLLM 설정
-
-`configs/vllm.yaml` 편집. `model`, `max_model_len`, `gpu_memory_utilization` 등이 거기 있음. 변경 후 재시작 필요.
-
-### 시스템 프롬프트
-
-루트의 `system_prompt.md` 편집. **요청마다 파일을 읽으므로 재시작 불필요.**
-빈 파일이면 system 메시지를 보내지 않음 (현재 기본).
+이전 버전이 사용하던 vLLM 인자 묶음. 현재 셸은 인자를 직접 박지만, 파라미터 기준값(예: `max_model_len: 50000`, `gpu_memory_utilization: 0.90`) 은 이 파일을 보고 맞췄다. 변경하려면 `scripts/run_vlm_app.sh` 의 `vllm serve` 호출을 직접 편집.
 
 ---
 
-## 운영
-
-### 상태 확인
-
-```bash
-uv run vllm-server status --probe
-```
-
-### 로그
-
-```bash
-tail -f logs/requests.jsonl | jq .
-```
-
-JSONL 한 줄 = 한 요청. 필드:
-`ts, client_ip, prompt, prompt_chars, has_image, image_bytes, image_mime, max_completion_tokens, json_output, enable_thinking, output_text, reasoning_text, latency_ms, status, error`.
-
-vLLM 자체 로그는 `~/.local/state/vllm-server/server.log`.
-
-### 기동/종료
-
-```bash
-./scripts/start.sh        # 기본 백그라운드. 로그: logs/start.out
-./scripts/start.sh --fg   # 포그라운드 (Ctrl-C 로 끊기)
-./scripts/stop.sh         # 종료
-```
-
----
-
-## 모델 수동 다운로드
-
-install.sh의 자동 다운로드가 실패한 경우, 직접 받아서 이 위치에 둔다:
-
-```
-./models/qwen3.5-27b/
-├── config.json
-├── tokenizer.json
-├── tokenizer_config.json
-├── model.safetensors-00001-of-00011.safetensors
-├── ... (전체 safetensors 파일)
-└── ...
-```
-
-`config.json`이 존재하면 install.sh가 통과한다. 모델 출처: <https://huggingface.co/Qwen/Qwen3.5-27B>.
-
----
-
-## vLLM 빌드 실패 시
-
-GB10/Blackwell + aarch64 조합은 prebuilt wheel이 없을 수 있다. 시도 순서:
-
-1. `uv pip install --pre vllm` (nightly)
-2. 소스 빌드: <https://docs.vllm.ai/en/latest/getting_started/installation.html>
-3. NVIDIA 공식 컨테이너(NGC)에서 vLLM 가져오기
-
-한 머신에서 뚫리면 동일 환경의 다른 머신엔 같은 절차로 재현된다.
-
----
-
-## 디렉터리 구조
+## 디렉토리 구조
 
 ```
 vllm-auto/
-├── configs/
-│   ├── app.yaml             # 앱 서버 설정
-│   └── vllm.yaml            # vLLM 설정 (vllm serve 인자 1:1 매핑)
 ├── scripts/
-│   ├── install.sh           # 1회 부트스트랩
-│   ├── start.sh             # 서빙 시작
-│   └── stop.sh              # 백그라운드 종료
-├── src/
-│   ├── app/                 # FastAPI 앱
-│   └── vllm_server/         # vLLM lifecycle CLI
-├── models/                  # .gitignore. 모델 가중치
-├── logs/                    # .gitignore. requests.jsonl 누적
-├── system_prompt.md         # 편집 가능. 매 요청마다 read
-└── pyproject.toml
+│   ├── run_vlm_app.sh    # 진입점: venv 셋업 + vllm 부팅 + ready 신호
+│   └── stop_vlm_app.sh   # 종료: SIGTERM(grace 30s) → SIGKILL
+├── configs/
+│   └── vllm.yaml         # 참고용 파라미터 (셸이 직접 사용하지는 않음)
+├── models/               # .gitignore. 모델 가중치를 여기에 둔다 (사용자가 준비)
+├── logs/                 # .gitignore. vllm 자체 로그 누적
+└── output/               # 런타임 상태 파일 (status.json)
 ```
 
 ---
 
 ## 보안 고지
 
-인증 없음. `0.0.0.0:8080` 바인딩이라 같은 사내 네트워크의 누구든 호출 가능. **사내망에서만** 띄울 것.
+인증 없음. 기본 바인딩이 `127.0.0.1` 이라 외부에서 직접 접속 불가. `VLLM_HOST=0.0.0.0` 로 외부 노출 시 같은 사내 네트워크의 누구든 호출 가능. **사내망에서만** 띄울 것.

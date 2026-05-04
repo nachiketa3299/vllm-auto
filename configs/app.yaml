@@ -1,9 +1,0 @@
-# 앱 서버 설정. 환경변수로 오버라이드 가능 (APP_HOST, APP_PORT 등).
-host: 0.0.0.0
-port: 8080
-vllm_base_url: http://127.0.0.1:8000/v1
-max_completion_tokens: 10000
-timeout_seconds: 600
-max_image_bytes: 15728640    # 15 MiB
-log_path: logs/requests.jsonl
-system_prompt_path: system_prompt.md

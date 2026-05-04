@@ -50,10 +50,16 @@ if ! command -v uv > /dev/null 2>&1; then
 fi
 
 # 2. 첫 실행이면 venv 부트스트랩 (vllm + 의존성 설치).
+#    핵심: vllm 은 CUDA 13 nightly wheel index 에서 받아야 한다.
+#    PyPI 기본 인덱스는 CUDA 12 + 일부 의존성(fastsafetensors 등) 의 ARM aarch64
+#    prebuilt 가 없어 source build 를 강제 -> Python.h 등 시스템 빌드툴 필요해짐.
+#    nightly index 에는 cu13 + aarch64 prebuilt 가 있어서 컴파일 단계 자체가 생략됨.
 if [ ! -d .venv ]; then
   echo "[run_vlm_app] Setting up venv (first run; takes a while)..."
   uv venv
-  uv pip install vllm
+  uv pip install --pre vllm \
+    --extra-index-url https://wheels.vllm.ai/nightly \
+    --index-strategy unsafe-best-match
 fi
 
 # 3. 이미 떠 있으면 부팅 스킵 (안전망 — 같은 세션에서 연속 호출 시).

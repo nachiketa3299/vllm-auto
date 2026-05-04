@@ -23,7 +23,8 @@ DGX Spark(GB10) 기본 이미지엔 보통 다 있다. 새 머신에선 다음�
 ### 셸이 알아서 처리하는 것 (최초 `run_vlm_app.sh` 1회, 인터넷 필요)
 - `uv` 설치 (없으면 `curl -LsSf https://astral.sh/uv/install.sh | sh`, `~/.local/bin` 에 설치)
 - `.venv/` 생성 (`uv venv`)
-- vLLM 설치 (`uv pip install vllm`)
+- vLLM 설치: `uv pip install --pre vllm --extra-index-url https://wheels.vllm.ai/nightly --index-strategy unsafe-best-match`
+  - nightly index 를 쓰는 이유: CUDA 13 + ARM aarch64 prebuilt wheel 이 PyPI 안정 버전엔 없고 nightly 에만 있음. 안 쓰면 fastsafetensors 등 의존성이 source build 강제 → Python.h 필요 등 시스템 빌드툴 의존성이 줄줄이 따라옴.
 
 ### 사용자가 미리 준비해야 하는 것
 - **모델 가중치**: `./models/qwen3.5-27b/` 에 Qwen3.5-27B 가중치를 두어야 한다. 자동 다운로드 안 함.

@@ -79,6 +79,19 @@ if [ ! -d .venv ]; then
     --index-strategy unsafe-best-match
 fi
 
+# 2.3. ninja 사전 보장 — flashinfer 가 sampling/attention kernel 을 JIT 컴파일할 때
+#      ninja 빌드 시스템이 필요하다. vllm 의존성에 자동으로 안 따라오는 케이스가
+#      있어 명시 설치. PyPI 의 ninja 패키지는 venv/bin/ninja 바이너리를 함께 배포.
+if [ ! -x ".venv/bin/ninja" ]; then
+  echo "[run_vlm_app] Installing ninja into .venv (flashinfer JIT compile)..."
+  uv pip install ninja
+fi
+
+# 2.4. .venv/bin 을 PATH 에 prepend — flashinfer 가 subprocess 로 ninja 를 호출할 때
+#      PATH 에서 찾을 수 있어야 한다. uv run 외부에서 .venv/bin/vllm 을 직접 호출하므로
+#      PATH 가 자동으로 잡히지 않음.
+export PATH="${REPO_ROOT}/.venv/bin:${PATH}"
+
 # 2.5. 모델 가중치 자동 다운로드 (없으면).
 #      옛 install.sh 의 5단계를 흡수. config.json 존재 여부로 멱등 체크.
 #      약 54GB. 인증이 필요한 경우 HF_TOKEN 환경변수 또는 사전 huggingface-cli login.

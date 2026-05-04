@@ -79,20 +79,29 @@ if [ ! -d .venv ]; then
     --index-strategy unsafe-best-match
 fi
 
-# 2.5. 모델 경로 검증 + 절대경로 변환.
-#      vllm 내부에서 transformers/huggingface_hub 가 상대경로 './xxx' 를
-#      repo_id 로 오인하는 경우가 있어 절대경로로 통일.
+# 2.5. 모델 가중치 자동 다운로드 (없으면).
+#      옛 install.sh 의 5단계를 흡수. config.json 존재 여부로 멱등 체크.
+#      약 54GB. 인증이 필요한 경우 HF_TOKEN 환경변수 또는 사전 huggingface-cli login.
+MODEL_REPO="${MODEL_REPO:-Qwen/Qwen3.5-27B}"
 if [ ! -f "${MODEL_PATH}/config.json" ]; then
-  write_status "$(printf '{"current_status":"failed","message":"model not found at %s (config.json missing)"}' "${MODEL_PATH}")"
-  cat >&2 <<HINT
-[run_vlm_app] FAILED: model weights not found at ${MODEL_PATH}
-Download once with:
-    cd ${REPO_ROOT}
-    uv run hf download Qwen/Qwen3.5-27B --local-dir ${MODEL_PATH}
-(약 54GB. Hugging Face 인증이 필요하면 \`uv run huggingface-cli login\` 또는 HF_TOKEN 환경변수.)
+  echo "[run_vlm_app] Model weights missing. Downloading ${MODEL_REPO} -> ${MODEL_PATH} (~54GB, takes a while)..."
+  mkdir -p "${MODEL_PATH}"
+  if ! uv run hf download "${MODEL_REPO}" --local-dir "${MODEL_PATH}"; then
+    write_status "$(printf '{"current_status":"failed","message":"model download failed for %s"}' "${MODEL_REPO}")"
+    cat >&2 <<HINT
+[run_vlm_app] FAILED: model download failed.
+Hugging Face 인증이 필요한 모델이면:
+    HF_TOKEN=hf_xxx ./scripts/run_vlm_app.sh
+또는 사전에:
+    uv run huggingface-cli login
+또는 수동으로 ${MODEL_REPO} 의 모든 파일을 ${MODEL_PATH} 에 직접 받으세요.
 HINT
-  exit 1
+    exit 1
+  fi
 fi
+
+# vllm 내부에서 transformers/huggingface_hub 가 상대경로 './xxx' 를 repo_id 로
+# 오인하는 경우가 있어 절대경로로 통일.
 MODEL_PATH="$(cd "${MODEL_PATH}" && pwd)"
 
 # 3. 이미 떠 있으면 부팅 스킵 (안전망 — 같은 세션에서 연속 호출 시).

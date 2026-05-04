@@ -30,17 +30,9 @@ DGX Spark(GB10) 기본 이미지엔 보통 다 있다. 새 머신에선 다음�
 - vLLM 설치: `uv pip install --pre vllm --extra-index-url https://wheels.vllm.ai/nightly --index-strategy unsafe-best-match`
   - nightly index 를 쓰는 이유: CUDA 13 + ARM aarch64 prebuilt wheel 이 PyPI 안정 버전엔 없고 nightly 에만 있음. 안 쓰면 fastsafetensors 등 의존성이 source build 강제 → Python.h 필요 등 시스템 빌드툴 의존성이 줄줄이 따라옴.
 
-### 사용자가 미리 준비해야 하는 것
-- **모델 가중치**: `./models/qwen3.5-27b/` 에 Qwen3.5-27B 가중치를 두어야 한다. 자동 다운로드 안 함.
-  ```
-  ./models/qwen3.5-27b/
-  ├── config.json
-  ├── tokenizer.json
-  ├── tokenizer_config.json
-  ├── model.safetensors-00001-of-00011.safetensors
-  └── ...
-  ```
-  출처: <https://huggingface.co/Qwen/Qwen3.5-27B>. `huggingface-cli download Qwen/Qwen3.5-27B --local-dir ./models/qwen3.5-27b` 등으로.
+### 사용자가 미리 준비해야 할 수 있는 것
+- **Hugging Face 인증** (모델이 gated 면): `uv run huggingface-cli login` 또는 `HF_TOKEN=hf_xxx ./scripts/run_vlm_app.sh`. 인증 없이 다운로드 되는 모델이면 불필요.
+- **모델 가중치**: `run_vlm_app.sh` 가 첫 실행 시 자동 다운로드 (`Qwen/Qwen3.5-27B` -> `./models/qwen3.5-27b/`, 약 54GB). 이미 있으면 (`config.json` 존재) 다운로드 건너뜀. `MODEL_REPO` 환경변수로 다른 모델 지정 가능.
 
 ### 머신 자원
 - **디스크 ~70GB 여유** — 모델 ~54GB + .venv ~6GB

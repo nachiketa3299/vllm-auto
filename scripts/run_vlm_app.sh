@@ -79,11 +79,27 @@ if [ ! -d .venv ]; then
     --index-strategy unsafe-best-match
 fi
 
+# 2.5. 모델 경로 검증 + 절대경로 변환.
+#      vllm 내부에서 transformers/huggingface_hub 가 상대경로 './xxx' 를
+#      repo_id 로 오인하는 경우가 있어 절대경로로 통일.
+if [ ! -f "${MODEL_PATH}/config.json" ]; then
+  write_status "$(printf '{"current_status":"failed","message":"model not found at %s (config.json missing)"}' "${MODEL_PATH}")"
+  cat >&2 <<HINT
+[run_vlm_app] FAILED: model weights not found at ${MODEL_PATH}
+Download once with:
+    cd ${REPO_ROOT}
+    uv run hf download Qwen/Qwen3.5-27B --local-dir ${MODEL_PATH}
+(약 54GB. Hugging Face 인증이 필요하면 \`uv run huggingface-cli login\` 또는 HF_TOKEN 환경변수.)
+HINT
+  exit 1
+fi
+MODEL_PATH="$(cd "${MODEL_PATH}" && pwd)"
+
 # 3. 이미 떠 있으면 부팅 스킵 (안전망 — 같은 세션에서 연속 호출 시).
 if curl -sf "${VLLM_BASE_URL}/models" > /dev/null 2>&1; then
   echo "[run_vlm_app] vllm already running at ${VLLM_BASE_URL}; skipping start."
 else
-  echo "[run_vlm_app] Starting vllm serve in background..."
+  echo "[run_vlm_app] Starting vllm serve in background... (model=${MODEL_PATH})"
   nohup .venv/bin/vllm serve "${MODEL_PATH}" \
     --host "${VLLM_HOST}" \
     --port "${VLLM_PORT}" \

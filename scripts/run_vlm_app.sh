@@ -122,12 +122,15 @@ if curl -sf "${VLLM_BASE_URL}/models" > /dev/null 2>&1; then
   echo "[run_vlm_app] vllm already running at ${VLLM_BASE_URL}; skipping start."
 else
   echo "[run_vlm_app] Starting vllm serve in background... (model=${MODEL_PATH})"
+  # NOTE: --reasoning-parser qwen3 옵션을 의도적으로 사용하지 않음.
+  # vllm 의 reasoning_parser 가 stream 모드에서 thinking 안 한 응답을 모두 reasoning_content 로
+  # 잘못 라우팅하는 알려진 동작이 있어, 차라리 raw 출력 (<think>...</think> 태그 포함) 을
+  # 그대로 전달하고 클라이언트 (Unity VlmSseClient) 측에서 직접 파싱한다.
   nohup .venv/bin/vllm serve "${MODEL_PATH}" \
     --host "${VLLM_HOST}" \
     --port "${VLLM_PORT}" \
     --max-model-len 50000 \
     --gpu-memory-utilization 0.90 \
-    --reasoning-parser qwen3 \
     --trust-remote-code \
     > logs/vllm.log 2>&1 &
   echo $! > vllm.pid

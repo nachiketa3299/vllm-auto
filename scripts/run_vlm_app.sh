@@ -122,15 +122,15 @@ if curl -sf "${VLLM_BASE_URL}/models" > /dev/null 2>&1; then
   echo "[run_vlm_app] vllm already running at ${VLLM_BASE_URL}; skipping start."
 else
   echo "[run_vlm_app] Starting vllm serve in background... (model=${MODEL_PATH})"
-  # --reasoning-parser qwen3: 모델이 emit 하는 </think> 를 기준으로 vllm 이 응답을
-  # delta.reasoning_content 와 delta.content 두 필드로 자동 분리해 준다.
-  # 클라이언트는 두 필드만 그대로 받아쓰면 되고, <think> 태그 직접 파싱 같은 게 필요 없어진다.
+  # --reasoning-parser 를 의도적으로 사용하지 않음.
+  # 클라이언트가 사고/본문 구분 없이 단일 텍스트 박스에 누적 표시하므로 가르는 의미가 없음.
+  # 모델 raw 출력 (<think>...</think> 태그 글자 포함) 을 그대로 delta.content 로 흘려보내고
+  # 클라이언트는 그것만 받아 누적함.
   nohup .venv/bin/vllm serve "${MODEL_PATH}" \
     --host "${VLLM_HOST}" \
     --port "${VLLM_PORT}" \
     --max-model-len 50000 \
     --gpu-memory-utilization 0.90 \
-    --reasoning-parser qwen3 \
     --trust-remote-code \
     > logs/vllm.log 2>&1 &
   echo $! > vllm.pid

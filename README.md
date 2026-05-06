@@ -108,10 +108,10 @@ curl http://<host>:8000/v1/chat/completions \
 ```
 
 ### 스트리밍 (SSE)
-요청 본문에 `"stream": true` 를 추가하면 응답이 SSE 청크로 흘러온다. 클라이언트는 `data: ` 라인을 파싱하여 `choices[0].delta.content` (또는 `delta.reasoning_content`) 를 누적.
+요청 본문에 `"stream": true` 를 추가하면 응답이 SSE 청크로 흘러온다. 클라이언트는 `data: ` 라인을 파싱하여 `choices[0].delta.content` 를 누적.
 
-### 사고 과정 (reasoning) 토큰 분리
-요청 본문에 `"chat_template_kwargs": {"enable_thinking": true}` 를 추가하면 `<think>...</think>` 토큰이 응답의 별도 필드(`reasoning_content` / `delta.reasoning`)로 분리된다. (`run_vlm_app.sh` 에서 `--reasoning-parser qwen3` 옵션이 활성화되어 있어야 함 — 기본 활성화)
+### 사고 과정 (thinking) 토큰
+요청 본문에 `"chat_template_kwargs": {"enable_thinking": true}` 를 추가하면 모델이 `<think>...</think>` 블록 안에 사고 과정을 먼저 생성하고 그 뒤에 본문을 출력한다. **현재 서버는 `--reasoning-parser` 옵션을 사용하지 않으므로** 사고 토큰은 `<think>...</think>` 태그 글자 그대로 `delta.content` 에 포함되어 흘러온다. 클라이언트가 별도 분리하지 않고 그대로 보여줄 수 있도록 한 의도적 선택.
 
 ### JSON 출력 강제
 요청 본문에 `"response_format": {"type": "json_object"}` 를 추가.

@@ -21,7 +21,10 @@ cd "${REPO_ROOT}"
 
 mkdir -p logs output
 
-VLLM_HOST="${VLLM_HOST:-127.0.0.1}"
+# 외부 클라이언트 (Unity, OpenClaw 봇) 가 DGX 를 치는 게 이 프로젝트의 본분이라
+# 디폴트 bind 를 0.0.0.0 으로. localhost-only 가 필요한 디버깅 케이스라면
+# VLLM_HOST=127.0.0.1 ./scripts/run_vlm_app.sh 로 명시.
+VLLM_HOST="${VLLM_HOST:-0.0.0.0}"
 VLLM_PORT="${VLLM_PORT:-8000}"
 VLLM_BASE_URL="http://${VLLM_HOST}:${VLLM_PORT}/v1"
 MODEL_PATH="${MODEL_PATH:-./models/qwen3.5-27b}"

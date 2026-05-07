@@ -126,13 +126,17 @@ curl http://<host>:8000/v1/chat/completions \
 
 | 변수 | 기본 | 설명 |
 |---|---|---|
-| `VLLM_HOST` | `127.0.0.1` | vLLM 바인딩 호스트. 외부 접속 허용하려면 `0.0.0.0`. |
+| `VLLM_HOST` | `0.0.0.0` | vLLM 바인딩 호스트. 외부 클라이언트(Unity, OpenClaw 봇) 가 본 프로젝트의 본분이라 디폴트가 0.0.0.0. localhost-only 디버깅이 필요하면 `127.0.0.1` 명시. |
 | `VLLM_PORT` | `8000` | vLLM 바인딩 포트. |
 | `MODEL_PATH` | `./models/qwen3.5-27b` | 모델 가중치 디렉토리. |
 | `STARTUP_TIMEOUT_SEC` | `900` | 모델 로딩 대기 타임아웃 (초). 초과 시 status 가 `failed`. |
 
 ```bash
-VLLM_HOST=0.0.0.0 ./scripts/run_vlm_app.sh
+# 디폴트 그대로 (외부 접근 허용)
+./scripts/run_vlm_app.sh
+
+# 디버깅용 — DGX 내부에서만 접근
+VLLM_HOST=127.0.0.1 ./scripts/run_vlm_app.sh
 ```
 
 ---
